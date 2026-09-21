@@ -196,22 +196,12 @@
         <div class="metric"><span class="metric-label">完整槽位</span><span class="metric-value" id="slotSize">X 40槽 · Y 40槽</span></div>
       </div>
       <div class="actions">
-        <button class="btn" id="defaultSplit" type="button">默认十字分割</button>
         <button class="btn danger" id="clearAll" type="button">清空分隔板</button>
       </div>
     </section>
 
     <div class="main-grid">
       <section class="card workspace" aria-label="分隔板绘图区">
-        <div class="toolbar">
-          <div class="tool-group" role="group" aria-label="绘制方向">
-            <button class="tool" id="toolAuto" type="button" aria-pressed="true">↔ 自动识别方向</button>
-            <button class="tool" id="toolH" type="button" aria-pressed="false">— 锁定横向</button>
-            <button class="tool" id="toolV" type="button" aria-pressed="false">│ 锁定纵向</button>
-            <button class="tool" id="toolBranch" type="button" aria-pressed="false">＋ 从板上绘制分支</button>
-          </div>
-          <div class="hint">起点仅限边框或已有分隔板 · 直接拖动已有板可移动<br><span class="slot-spec">单槽 3 × 1.1 mm · 内圆角 R0.5</span></div>
-        </div>
         <div class="canvas-wrap">
           <svg id="planner" role="img" aria-label="Gridfinity 盒体槽位规划图"></svg>
         </div>
@@ -220,19 +210,13 @@
       <aside class="card panel" aria-label="分隔板清单">
         <div class="panel-head">
           <div class="panel-head-row"><h2>分隔板清单</h2><span class="count-badge" id="dividerCount">0 块</span></div>
-          <p class="panel-note">槽数按两个端点的槽位差计算。修改端点后，图纸与板长会同步更新。</p>
+          <p class="panel-note">边框拖动新增 · 线身延长/分支 · 标注拖动移动 · 右键删除</p>
         </div>
         <div class="divider-list" id="dividerList"></div>
         <div class="summary"><button class="btn primary" id="copyList" type="button">复制定制清单</button></div>
       </aside>
     </div>
 
-    <section class="formula-card" aria-label="计算规则">
-      <div class="formula-block"><strong>盒体实际外形</strong><code>42 × 格数 − 0.5 mm</code></div>
-      <div class="formula-block"><strong>完整跨度槽数</strong><code>7 × 格数 − 2</code></div>
-      <div class="formula-block"><strong>分隔板长度</strong><code>6 × 插槽数量 + 5 mm</code></div>
-      <div class="formula-block"><strong>固定凹槽尺寸</strong><code>3 × 1.1 mm · R0.5</code></div>
-    </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -240,7 +224,7 @@
     (() => {
       const SVG_NS = 'http://www.w3.org/2000/svg';
       const colors = ['#1687d9', '#ec7c2c', '#0f9f76', '#8b5cf6', '#dc4c5a', '#0891b2'];
-      const state = { xCells: 6, yCells: 6, tool: 'AUTO', branchMode: false, dividers: [], selected: null, draft: null, drawOrigin: null, moving: null };
+      const state = { xCells: 6, yCells: 6, dividers: [], selected: null, draft: null, drawOrigin: null, moving: null, bodyGesture: null, extending: null };
       const el = id => document.getElementById(id);
       const svg = el('planner');
       const layout = { vbW: 760, vbH: 610, left: 72, top: 34, maxW: 625, maxH: 515 };
@@ -389,67 +373,63 @@
       function drawDivider(d, index, selected, draft = false) {
         const color = draft ? '#475569' : colors[index % colors.length];
         const a = screenPoint(d.x1, d.y1); const b = screenPoint(d.x2, d.y2);
-        const group = node('g', { style: draft ? 'pointer-events:none' : `cursor:${state.branchMode ? 'crosshair' : 'move'}` });
-        if (!draft) group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'transparent', 'stroke-width': 22, 'stroke-linecap': 'round', 'pointer-events': 'stroke' }));
-        group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-width': selected ? 10 : 8, 'stroke-linecap': 'round', opacity: .92 }));
-        group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, 'stroke-width': selected ? 5 : 4, 'stroke-linecap': 'round', 'stroke-dasharray': draft ? '7 6' : 'none', opacity: draft ? .78 : 1 }));
-        group.append(node('circle', { cx: a.x, cy: a.y, r: selected ? 5.5 : 4, fill: '#fff', stroke: color, 'stroke-width': 2.5 }));
-        group.append(node('circle', { cx: b.x, cy: b.y, r: selected ? 5.5 : 4, fill: '#fff', stroke: color, 'stroke-width': 2.5 }));
+        const group = node('g', { style: draft ? 'pointer-events:none' : 'cursor:crosshair' });
         const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
         const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
-        const textY = d.orientation === 'H' ? my - 10 : my;
-        const textX = d.orientation === 'H' ? mx : mx + 11;
-        const rot = d.orientation === 'V' ? `rotate(-90 ${textX} ${textY})` : '';
+        if (!draft) group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'transparent', 'stroke-width': 24, 'stroke-linecap': 'round', 'pointer-events': 'stroke' }));
+        group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-width': selected ? 10 : 8, 'stroke-linecap': 'round', opacity: .92 }));
+        const visible = node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, 'stroke-width': selected ? 5 : 4, 'stroke-linecap': 'round', 'stroke-dasharray': draft ? '7 6' : 'none', opacity: draft ? .78 : 1 });
+        group.append(visible);
+        const startHandle = node('circle', { cx: a.x, cy: a.y, r: selected ? 6 : 5, fill: '#fff', stroke: color, 'stroke-width': 2.5, style: `cursor:${d.orientation === 'H' ? 'ew-resize' : 'ns-resize'}` });
+        const endHandle = node('circle', { cx: b.x, cy: b.y, r: selected ? 6 : 5, fill: '#fff', stroke: color, 'stroke-width': 2.5, style: `cursor:${d.orientation === 'H' ? 'ew-resize' : 'ns-resize'}` });
+        group.append(startHandle); group.append(endHandle);
+        const labelY = d.orientation === 'H' ? my - 10 : my;
+        const labelX = d.orientation === 'H' ? mx : mx + 12;
+        const rot = d.orientation === 'V' ? `rotate(-90 ${labelX} ${labelY})` : '';
         const content = draft ? `${slots}槽 · ${lengthForSlots(slots)}mm` : `${labelFor(d)}  ${slots}槽`;
-        const text = node('text', { x: textX, y: textY, fill: color, 'font-size': 12, 'font-weight': 800, 'text-anchor': 'middle', transform: rot, stroke: '#fff', 'stroke-width': 4, 'paint-order': 'stroke' }, content);
-        group.append(text);
-        if (!draft) group.addEventListener('pointerdown', evt => {
-          evt.stopPropagation();
-          state.selected = d.id;
-          if (state.branchMode) beginDraw(evt, d);
-          else beginMove(evt, d);
-        });
+        if (!draft) {
+          group.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginBodyGesture(evt, d); });
+          group.addEventListener('contextmenu', evt => { evt.preventDefault(); evt.stopPropagation(); deleteDividerWithToast(d.id); });
+          startHandle.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginExtend(evt, d, 'start'); });
+          endHandle.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginExtend(evt, d, 'end'); });
+        }
         svg.append(group);
+
+        const labelGroup = node('g', { style: draft ? 'pointer-events:none' : 'cursor:move' });
+        labelGroup.append(node('rect', { x: labelX - 32, y: labelY - 13, width: 64, height: 22, rx: 7, fill: 'transparent' }));
+        labelGroup.append(node('text', { x: labelX, y: labelY, fill: color, 'font-size': 12, 'font-weight': 800, 'text-anchor': 'middle', transform: rot, stroke: '#fff', 'stroke-width': 4, 'paint-order': 'stroke' }, content));
+        if (!draft) {
+          labelGroup.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginMove(evt, d); });
+          labelGroup.addEventListener('contextmenu', evt => { evt.preventDefault(); evt.stopPropagation(); deleteDividerWithToast(d.id); });
+        }
+        svg.append(labelGroup);
       }
 
-      function beginDraw(evt, sourceDivider = null) {
+      function beginDraw(evt) {
         if (evt.button !== undefined && evt.button !== 0) return;
         evt.preventDefault();
         const start = slotPoint(evt);
         const isOnBorder = start.x === 0 || start.x === maxX() || start.y === 0 || start.y === maxY();
-        if (!sourceDivider && !isOnBorder) {
-          showToast('起点必须在边框或已有分隔板上');
-          return;
-        }
-        const initialDirection = state.tool === 'V' ? 'V' : 'H';
-        state.drawOrigin = { slot: start, screen: svgPoint(evt), sourceDividerId: sourceDivider?.id || null };
-        state.draft = initialDirection === 'H'
-          ? { orientation: 'H', x1: start.x, y1: start.y, x2: start.x, y2: start.y }
-          : { orientation: 'V', x1: start.x, y1: start.y, x2: start.x, y2: start.y };
+        if (!isOnBorder) { showToast('起点必须在边框或已有分隔板上'); return; }
+        state.drawOrigin = { slot: start, screen: svgPoint(evt) };
+        state.draft = { orientation: 'H', x1: start.x, y1: start.y, x2: start.x, y2: start.y };
         svg.setPointerCapture?.(evt.pointerId);
         svg.addEventListener('pointermove', moveDraw);
         svg.addEventListener('pointerup', endDraw, { once: true });
         svg.addEventListener('pointercancel', endDraw, { once: true });
-        draw();
       }
 
       function moveDraw(evt) {
         if (!state.draft || !state.drawOrigin) return;
-        const p = slotPoint(evt);
-        let direction = state.tool;
-        if (direction === 'AUTO') {
-          const raw = svgPoint(evt);
-          direction = Math.abs(raw.x - state.drawOrigin.screen.x) >= Math.abs(raw.y - state.drawOrigin.screen.y) ? 'H' : 'V';
-        }
+        const p = slotPoint(evt); const raw = svgPoint(evt);
+        const direction = Math.abs(raw.x - state.drawOrigin.screen.x) >= Math.abs(raw.y - state.drawOrigin.screen.y) ? 'H' : 'V';
         const start = state.drawOrigin.slot;
-        state.draft.orientation = direction;
-        state.draft.x1 = start.x; state.draft.y1 = start.y;
-        state.draft.x2 = direction === 'H' ? p.x : start.x;
-        state.draft.y2 = direction === 'V' ? p.y : start.y;
+        state.draft.orientation = direction; state.draft.x1 = start.x; state.draft.y1 = start.y;
+        state.draft.x2 = direction === 'H' ? p.x : start.x; state.draft.y2 = direction === 'V' ? p.y : start.y;
         draw();
       }
 
-      function endDraw(evt) {
+      function endDraw() {
         svg.removeEventListener('pointermove', moveDraw);
         if (!state.draft) return;
         const span = Math.abs(state.draft.orientation === 'H' ? state.draft.x2 - state.draft.x1 : state.draft.y2 - state.draft.y1);
@@ -458,64 +438,79 @@
           if (state.draft.orientation === 'V' && state.draft.y2 < state.draft.y1) [state.draft.y1, state.draft.y2] = [state.draft.y2, state.draft.y1];
           const divider = { ...state.draft, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) };
           state.dividers.push(divider); state.selected = divider.id;
-        } else if (!state.drawOrigin?.sourceDividerId) showToast('起点和终点不能相同');
-        const wasBranch = Boolean(state.drawOrigin?.sourceDividerId);
-        state.draft = null; state.drawOrigin = null;
-        if (wasBranch) state.branchMode = false;
-        render();
+        }
+        state.draft = null; state.drawOrigin = null; render();
       }
 
       function beginMove(evt, divider) {
-        if (evt.button !== undefined && evt.button !== 0) return;
         evt.preventDefault();
         const start = slotPoint(evt);
-        state.moving = {
-          id: divider.id,
-          start,
-          original: { x1: divider.x1, y1: divider.y1, x2: divider.x2, y2: divider.y2 }
-        };
-        svg.setPointerCapture?.(evt.pointerId);
-        svg.addEventListener('pointermove', moveDivider);
-        svg.addEventListener('pointerup', endMove, { once: true });
-        svg.addEventListener('pointercancel', endMove, { once: true });
+        state.moving = { id: divider.id, start, original: { x1: divider.x1, y1: divider.y1, x2: divider.x2, y2: divider.y2 } };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveDivider); svg.addEventListener('pointerup', endMove, { once: true }); svg.addEventListener('pointercancel', endMove, { once: true });
       }
 
       function moveDivider(evt) {
         if (!state.moving) return;
-        const divider = state.dividers.find(item => item.id === state.moving.id);
-        if (!divider) return;
+        const divider = state.dividers.find(item => item.id === state.moving.id); if (!divider) return;
         const p = slotPoint(evt); const o = state.moving.original;
-        if (divider.orientation === 'H') {
-          const delta = p.y - state.moving.start.y;
-          const y = clampInt(o.y1 + delta, 0, maxY());
-          divider.y1 = y; divider.y2 = y;
-        } else {
-          const delta = p.x - state.moving.start.x;
-          const x = clampInt(o.x1 + delta, 0, maxX());
-          divider.x1 = x; divider.x2 = x;
+        if (divider.orientation === 'H') { const y = clampInt(o.y1 + p.y - state.moving.start.y, 0, maxY()); divider.y1 = y; divider.y2 = y; }
+        else { const x = clampInt(o.x1 + p.x - state.moving.start.x, 0, maxX()); divider.x1 = x; divider.x2 = x; }
+        draw();
+      }
+
+      function endMove() { svg.removeEventListener('pointermove', moveDivider); state.moving = null; render(); }
+
+      function beginExtend(evt, divider, end) {
+        evt.preventDefault();
+        state.extending = { id: divider.id, end };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveExtend); svg.addEventListener('pointerup', endExtend, { once: true }); svg.addEventListener('pointercancel', endExtend, { once: true });
+      }
+
+      function moveExtend(evt) {
+        if (!state.extending) return;
+        const divider = state.dividers.find(item => item.id === state.extending.id); if (!divider) return;
+        const p = slotPoint(evt);
+        if (divider.orientation === 'H') divider[state.extending.end === 'start' ? 'x1' : 'x2'] = p.x;
+        else divider[state.extending.end === 'start' ? 'y1' : 'y2'] = p.y;
+        draw();
+      }
+
+      function endExtend() { svg.removeEventListener('pointermove', moveExtend); state.extending = null; render(); }
+
+      function beginBodyGesture(evt, divider) {
+        evt.preventDefault();
+        state.bodyGesture = { id: divider.id, start: slotPoint(evt), screen: svgPoint(evt), action: null };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveBodyGesture); svg.addEventListener('pointerup', endBodyGesture, { once: true }); svg.addEventListener('pointercancel', endBodyGesture, { once: true });
+      }
+
+      function moveBodyGesture(evt) {
+        if (!state.bodyGesture) return;
+        const divider = state.dividers.find(item => item.id === state.bodyGesture.id); if (!divider) return;
+        const raw = svgPoint(evt); const dx = raw.x - state.bodyGesture.screen.x; const dy = raw.y - state.bodyGesture.screen.y;
+        if (!state.bodyGesture.action && Math.max(Math.abs(dx), Math.abs(dy)) > 5) {
+          const parallel = divider.orientation === 'H' ? Math.abs(dx) : Math.abs(dy);
+          const perpendicular = divider.orientation === 'H' ? Math.abs(dy) : Math.abs(dx);
+          state.bodyGesture.action = parallel >= perpendicular ? 'extend' : 'branch';
+          if (state.bodyGesture.action === 'branch') state.draft = { orientation: divider.orientation === 'H' ? 'V' : 'H', x1: state.bodyGesture.start.x, y1: state.bodyGesture.start.y, x2: state.bodyGesture.start.x, y2: state.bodyGesture.start.y };
         }
-        draw();
+        const p = slotPoint(evt);
+        if (state.bodyGesture.action === 'extend') {
+          if (divider.orientation === 'H') divider[dx < 0 ? 'x1' : 'x2'] = p.x;
+          else divider[dy < 0 ? 'y1' : 'y2'] = p.y;
+        } else if (state.bodyGesture.action === 'branch') {
+          if (state.draft.orientation === 'H') state.draft.x2 = p.x;
+          else state.draft.y2 = p.y;
+        }
+        if (state.bodyGesture.action) draw();
       }
 
-      function endMove() {
-        svg.removeEventListener('pointermove', moveDivider);
-        state.moving = null;
-        render();
-      }
-
-      function setTool(tool) {
-        state.tool = tool;
-        el('toolAuto').setAttribute('aria-pressed', tool === 'AUTO');
-        el('toolH').setAttribute('aria-pressed', tool === 'H');
-        el('toolV').setAttribute('aria-pressed', tool === 'V');
-        draw();
-      }
-
-      function toggleBranchMode() {
-        state.branchMode = !state.branchMode;
-        el('toolBranch').setAttribute('aria-pressed', state.branchMode);
-        showToast(state.branchMode ? '分支模式：从已有分隔板上拖动' : '分支模式已关闭');
-        draw();
+      function endBodyGesture() {
+        svg.removeEventListener('pointermove', moveBodyGesture);
+        if (state.bodyGesture?.action === 'branch' && state.draft) {
+          const span = Math.abs(state.draft.orientation === 'H' ? state.draft.x2 - state.draft.x1 : state.draft.y2 - state.draft.y1);
+          if (span > 0) { const divider = { ...state.draft, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }; state.dividers.push(divider); state.selected = divider.id; }
+        }
+        state.draft = null; state.bodyGesture = null; render();
       }
 
       function makeDefaultSplit() {
@@ -541,6 +536,13 @@
         render();
       }
 
+      function deleteDividerWithToast(id) {
+        const divider = state.dividers.find(d => d.id === id);
+        const label = divider ? labelFor(divider) : '分隔板';
+        deleteDivider(id);
+        showToast(`${label} 已删除`);
+      }
+
       function updateEndpoint(id, which, value) {
         const d = state.dividers.find(item => item.id === id); if (!d) return;
         const max = d.orientation === 'H' ? maxX() : maxY();
@@ -557,13 +559,11 @@
         el('dividerCount').textContent = `${state.dividers.length} 块`;
         if (!state.dividers.length) {
           const empty = document.createElement('div'); empty.className = 'empty';
-          empty.innerHTML = '<div><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="9" y="10" width="46" height="44" rx="4" stroke="currentColor" stroke-width="3"/><path d="M32 10v44M9 32h23" stroke="currentColor" stroke-width="3" stroke-dasharray="4 4"/></svg><p>选择横向或纵向工具，然后在槽位图上拖动绘制分隔板。</p></div>';
+          empty.innerHTML = '<div><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="9" y="10" width="46" height="44" rx="4" stroke="currentColor" stroke-width="3"/><path d="M32 10v44M9 32h23" stroke="currentColor" stroke-width="3" stroke-dasharray="4 4"/></svg><p>从盒体边框拖动即可新增分隔板。</p></div>';
           list.append(empty); return;
         }
         state.dividers.forEach((d, index) => {
           const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
-          const start = d.orientation === 'H' ? d.x1 : d.y1;
-          const end = d.orientation === 'H' ? d.x2 : d.y2;
           const item = document.createElement('article');
           item.className = 'divider-item' + (d.id === state.selected ? ' selected' : '');
           item.addEventListener('click', () => { state.selected = d.id; render(); });
@@ -572,16 +572,8 @@
               <div class="item-name"><span class="swatch" style="background:${colors[index % colors.length]}"></span>${labelFor(d)} · ${d.orientation === 'H' ? `横向 · Y${d.y1}` : `纵向 · X${d.x1}`}</div>
               <button class="delete-btn" type="button" aria-label="删除 ${labelFor(d)}">×</button>
             </div>
-            <div class="item-result"><span class="slot-result">${slots} 槽</span><span class="mm-result">${lengthForSlots(slots)} mm</span></div>
-            <div class="coord-row">
-              <div class="coord"><label>起点槽位</label><input class="start-input" type="number" min="0" max="${d.orientation === 'H' ? maxX() : maxY()}" value="${start}"></div>
-              <span class="arrow">→</span>
-              <div class="coord"><label>终点槽位</label><input class="end-input" type="number" min="0" max="${d.orientation === 'H' ? maxX() : maxY()}" value="${end}"></div>
-            </div>`;
+            <div class="item-result"><span class="slot-result">${slots} 槽</span><span class="mm-result">${lengthForSlots(slots)} mm</span></div>`;
           item.querySelector('.delete-btn').addEventListener('click', evt => { evt.stopPropagation(); deleteDivider(d.id); });
-          item.querySelector('.start-input').addEventListener('change', evt => { evt.stopPropagation(); updateEndpoint(d.id, 'start', evt.target.value); });
-          item.querySelector('.end-input').addEventListener('change', evt => { evt.stopPropagation(); updateEndpoint(d.id, 'end', evt.target.value); });
-          item.querySelectorAll('input').forEach(input => input.addEventListener('click', evt => evt.stopPropagation()));
           list.append(item);
         });
       }
@@ -591,10 +583,7 @@
         el('slotSize').textContent = `X ${maxX()}槽 · Y ${maxY()}槽`;
       }
 
-      function render() {
-        el('toolBranch').setAttribute('aria-pressed', state.branchMode);
-        renderMetrics(); renderList(); draw();
-      }
+      function render() { renderMetrics(); renderList(); draw(); }
 
       let toastTimer;
       function showToast(message) {
@@ -619,13 +608,8 @@
         catch { showToast('浏览器未允许复制，请手动记录清单'); }
       }
 
-      el('toolAuto').addEventListener('click', () => setTool('AUTO'));
-      el('toolH').addEventListener('click', () => setTool('H'));
-      el('toolV').addEventListener('click', () => setTool('V'));
-      el('toolBranch').addEventListener('click', toggleBranchMode);
       el('xCells').addEventListener('change', updateDimensions);
       el('yCells').addEventListener('change', updateDimensions);
-      el('defaultSplit').addEventListener('click', makeDefaultSplit);
       el('clearAll').addEventListener('click', () => { state.dividers = []; state.selected = null; render(); });
       el('copyList').addEventListener('click', copyList);
       window.addEventListener('resize', draw);
