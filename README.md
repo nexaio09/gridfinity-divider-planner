@@ -25,11 +25,13 @@
 ```text
 hardware/fusion360/   Fusion 360 参数化源文件
 hardware/step/        STEP 通用 CAD 文件
-planner/              在线规划工具静态网页
+index.html            在线规划工具静态网页（GitHub Pages 入口）
 tutorial/             使用教程 GIF
 ```
 
 `.f3d` 文件保留 Fusion 360 参数化历史；STEP 文件用于其他 CAD 软件交换。
+
+将仓库启用 GitHub Pages 后，根目录的 `index.html` 即为网页工具入口。
 
 ## 打印与修改
 
