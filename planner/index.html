@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="Gridfinity 分隔板槽数与长度可视化计算工具">
+  <title>Gridfinity 分隔板规划器</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111827'/%3E%3Cpath d='M14 18h36v28H14z' fill='none' stroke='%23f8fafc' stroke-width='4'/%3E%3Cpath d='M32 18v28M14 32h18' stroke='%2338bdf8' stroke-width='4'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --ink: #111827;
+      --muted: #64748b;
+      --line: #dbe2ea;
+      --panel: #ffffff;
+      --canvas: #f8fafc;
+      --blue: #1687d9;
+      --orange: #ec7c2c;
+      --green: #0f9f76;
+      --red: #dc4c5a;
+      --shadow: 0 18px 50px rgba(15, 23, 42, .09);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% -10%, rgba(56,189,248,.13), transparent 34rem),
+        linear-gradient(180deg, #f7fafc 0, #eef2f6 100%);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .app { max-width: 1480px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 42px) 36px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark {
+      width: 46px; height: 46px; border-radius: 13px; flex: 0 0 auto;
+      display: grid; place-items: center; color: white; background: var(--ink);
+      box-shadow: 0 10px 25px rgba(15,23,42,.18);
+    }
+    .brand-mark svg { width: 27px; }
+    h1 { margin: 0; font-size: clamp(1.35rem, 2.2vw, 1.9rem); letter-spacing: -.035em; }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: .92rem; }
+    .formula-pill {
+      flex: 0 0 auto; margin-top: 4px; padding: 9px 13px; border: 1px solid #cfd8e3;
+      border-radius: 999px; color: #334155; background: rgba(255,255,255,.72);
+      font: 600 .82rem ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .control-strip {
+      display: grid; grid-template-columns: auto auto 1fr auto; align-items: end; gap: 14px;
+      padding: 18px; margin-bottom: 14px; background: rgba(255,255,255,.88);
+      border: 1px solid rgba(203,213,225,.82); border-radius: 18px; box-shadow: var(--shadow);
+    }
+    .field label { display: block; margin: 0 0 7px; font-size: .78rem; font-weight: 700; color: #475569; }
+    .number-box { display: flex; align-items: center; gap: 8px; }
+    .number-box input {
+      width: 78px; height: 42px; padding: 0 10px; border: 1px solid #cbd5e1;
+      border-radius: 10px; background: white; font-weight: 750; text-align: center; outline: none;
+    }
+    .number-box input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(22,135,217,.14); }
+    .unit { color: var(--muted); font-size: .85rem; }
+    .metrics { display: flex; gap: 10px; align-items: stretch; min-width: 0; }
+    .metric { min-width: 150px; padding: 8px 12px; border-left: 1px solid var(--line); }
+    .metric-label { display: block; color: var(--muted); font-size: .72rem; }
+    .metric-value { display: block; margin-top: 3px; font-size: .98rem; font-weight: 780; white-space: nowrap; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn {
+      min-height: 40px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 10px;
+      background: white; font-size: .86rem; font-weight: 700; cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .btn:hover { border-color: #94a3b8; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary { color: white; border-color: var(--ink); background: var(--ink); }
+    .btn.danger { color: var(--red); }
+    .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 335px; gap: 14px; align-items: stretch; }
+    .card { border: 1px solid rgba(203,213,225,.88); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow); }
+    .workspace { overflow: hidden; min-height: 660px; display: flex; flex-direction: column; }
+    .toolbar {
+      min-height: 62px; display: flex; align-items: center; justify-content: space-between;
+      gap: 14px; padding: 12px 15px; border-bottom: 1px solid var(--line); background: #fff;
+    }
+    .tool-group { display: flex; gap: 7px; flex-wrap: wrap; }
+    .tool {
+      min-height: 38px; padding: 0 13px; border: 1px solid #d5dde7; border-radius: 10px;
+      background: #f8fafc; font-size: .84rem; font-weight: 720; cursor: pointer;
+    }
+    .tool[aria-pressed="true"] { color: #075985; border-color: #7dd3fc; background: #e0f2fe; box-shadow: inset 0 0 0 1px #bae6fd; }
+    .hint { color: var(--muted); font-size: .8rem; text-align: right; }
+    .slot-spec { color: #334155; font-weight: 720; white-space: nowrap; }
+    .canvas-wrap {
+      position: relative; flex: 1; min-height: 590px; display: grid; place-items: center;
+      padding: 18px; overflow: hidden; background:
+        linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px),
+        linear-gradient(rgba(148,163,184,.08) 1px, transparent 1px), #f8fafc;
+      background-size: 24px 24px;
+    }
+    #planner { width: 100%; height: 100%; min-height: 545px; touch-action: none; user-select: none; }
+    .panel { min-height: 660px; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-head { padding: 17px 18px 14px; border-bottom: 1px solid var(--line); }
+    .panel-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .panel h2 { margin: 0; font-size: 1rem; letter-spacing: -.015em; }
+    .count-badge { padding: 4px 8px; border-radius: 999px; color: #075985; background: #e0f2fe; font-size: .74rem; font-weight: 800; }
+    .panel-note { margin: 8px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+    .divider-list { flex: 1; padding: 12px; overflow: auto; }
+    .empty { height: 100%; min-height: 250px; display: grid; place-items: center; text-align: center; color: var(--muted); }
+    .empty svg { width: 52px; margin-bottom: 10px; color: #94a3b8; }
+    .empty p { max-width: 220px; margin: 0; font-size: .86rem; line-height: 1.6; }
+    .divider-item {
+      padding: 13px; margin-bottom: 9px; border: 1px solid #dbe2ea; border-radius: 13px;
+      background: #fbfdff; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    }
+    .divider-item.selected { border-color: #7dd3fc; box-shadow: 0 0 0 3px rgba(56,189,248,.12); background: #f7fcff; }
+    .item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .item-name { display: flex; align-items: center; gap: 8px; font-weight: 820; }
+    .swatch { width: 9px; height: 9px; border-radius: 999px; }
+    .delete-btn { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; cursor: pointer; }
+    .delete-btn:hover { color: var(--red); background: #fff1f2; }
+    .item-result { display: flex; align-items: baseline; gap: 7px; margin: 10px 0 11px; }
+    .slot-result { font-size: 1.28rem; font-weight: 860; letter-spacing: -.04em; }
+    .mm-result { color: var(--muted); font-size: .84rem; font-weight: 700; }
+    .coord-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 7px; align-items: end; }
+    .coord label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .68rem; font-weight: 700; }
+    .coord input { width: 100%; height: 34px; padding: 0 7px; border: 1px solid #d6dee8; border-radius: 8px; background: white; text-align: center; font-weight: 700; outline: none; }
+    .coord input:focus { border-color: var(--blue); }
+    .arrow { padding-bottom: 7px; color: #94a3b8; }
+    .summary { padding: 13px; border-top: 1px solid var(--line); background: #f8fafc; }
+    .summary .btn { width: 100%; }
+    .formula-card {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 14px;
+      overflow: hidden; border: 1px solid rgba(203,213,225,.85); border-radius: 16px; background: var(--line);
+    }
+    .formula-block { padding: 14px 17px; background: rgba(255,255,255,.88); }
+    .formula-block strong { display: block; margin-bottom: 5px; font-size: .78rem; color: #475569; }
+    .formula-block code { color: #0f172a; font: 700 .85rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translate(-50%, 18px);
+      padding: 10px 14px; border-radius: 10px; color: white; background: #111827;
+      box-shadow: 0 12px 35px rgba(15,23,42,.26); font-size: .84rem; font-weight: 700;
+      opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 1040px) {
+      .control-strip { grid-template-columns: auto auto 1fr; }
+      .actions { grid-column: 1 / -1; justify-content: flex-start; }
+      .main-grid { grid-template-columns: 1fr; }
+      .workspace, .panel { min-height: auto; }
+      .panel { max-height: none; }
+      .divider-list { max-height: 430px; }
+    }
+    @media (max-width: 720px) {
+      .app { padding: 18px 10px 28px; }
+      .topbar { align-items: center; }
+      .formula-pill { display: none; }
+      .control-strip { grid-template-columns: 1fr 1fr; padding: 14px; }
+      .metrics { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+      .metric { min-width: 0; border-left: 0; border-top: 1px solid var(--line); padding: 10px 2px 2px; }
+      .actions { grid-column: 1 / -1; }
+      .actions .btn { flex: 1; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .hint { text-align: left; }
+      .canvas-wrap { min-height: 465px; padding: 7px; }
+      #planner { min-height: 450px; }
+      .formula-card { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><rect x="4" y="5" width="24" height="22" rx="2" stroke="currentColor" stroke-width="2.5"/><path d="M16 5v22M4 16h12" stroke="#38bdf8" stroke-width="2.5"/></svg>
+        </div>
+        <div>
+          <h1>Gridfinity 分隔板规划器</h1>
+          <p class="subtitle">在槽位图上画分隔线，自动得到所需槽数与板长。</p>
+        </div>
+      </div>
+      <div class="formula-pill">板长 = 槽数 × 6 + 5 mm</div>
+    </header>
+
+    <section class="control-strip" aria-label="盒体参数">
+      <div class="field">
+        <label for="xCells">X 轴格数</label>
+        <div class="number-box"><input id="xCells" type="number" min="1" max="20" step="1" value="6"><span class="unit">格</span></div>
+      </div>
+      <div class="field">
+        <label for="yCells">Y 轴格数</label>
+        <div class="number-box"><input id="yCells" type="number" min="1" max="20" step="1" value="6"><span class="unit">格</span></div>
+      </div>
+      <div class="metrics" aria-live="polite">
+        <div class="metric"><span class="metric-label">盒体外形</span><span class="metric-value" id="outerSize">251.5 × 251.5 mm</span></div>
+        <div class="metric"><span class="metric-label">完整槽位</span><span class="metric-value" id="slotSize">X 40槽 · Y 40槽</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="clearAll" type="button">清空分隔板</button>
+      </div>
+    </section>
+
+    <div class="main-grid">
+      <section class="card workspace" aria-label="分隔板绘图区">
+        <div class="canvas-wrap">
+          <svg id="planner" role="img" aria-label="Gridfinity 盒体槽位规划图"></svg>
+        </div>
+      </section>
+
+      <aside class="card panel" aria-label="分隔板清单">
+        <div class="panel-head">
+          <div class="panel-head-row"><h2>分隔板清单</h2><span class="count-badge" id="dividerCount">0 块</span></div>
+          <p class="panel-note">边框拖动新增 · 线身延长/分支 · 标注拖动移动 · 右键删除</p>
+        </div>
+        <div class="divider-list" id="dividerList"></div>
+        <div class="summary"><button class="btn primary" id="copyList" type="button">复制定制清单</button></div>
+      </aside>
+    </div>
+
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const colors = ['#1687d9', '#ec7c2c', '#0f9f76', '#8b5cf6', '#dc4c5a', '#0891b2'];
+      const state = { xCells: 6, yCells: 6, dividers: [], selected: null, draft: null, drawOrigin: null, moving: null, bodyGesture: null, extending: null };
+      const el = id => document.getElementById(id);
+      const svg = el('planner');
+      const layout = { vbW: 760, vbH: 610, left: 72, top: 34, maxW: 625, maxH: 515 };
+
+      const slotsForCells = n => 7 * n - 2;
+      const outerForCells = n => 42 * n - .5;
+      const lengthForSlots = n => 6 * n + 5;
+      const clampInt = (value, min, max) => Math.min(max, Math.max(min, Math.round(Number(value) || 0)));
+      const maxX = () => slotsForCells(state.xCells);
+      const maxY = () => slotsForCells(state.yCells);
+
+      function geometry() {
+        const ratio = maxX() / maxY();
+        let w = layout.maxW;
+        let h = w / ratio;
+        if (h > layout.maxH) { h = layout.maxH; w = h * ratio; }
+        const x = layout.left + (layout.maxW - w) / 2;
+        const y = layout.top + (layout.maxH - h) / 2;
+        return { x, y, w, h, sx: w / maxX(), sy: h / maxY() };
+      }
+
+      function node(name, attrs = {}, text = '') {
+        const n = document.createElementNS(SVG_NS, name);
+        for (const [key, value] of Object.entries(attrs)) n.setAttribute(key, value);
+        if (text) n.textContent = text;
+        return n;
+      }
+
+      function svgPoint(evt) {
+        const p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+        return p.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      function slotPoint(evt) {
+        const p = svgPoint(evt); const g = geometry();
+        return {
+          x: clampInt((p.x - g.x) / g.sx, 0, maxX()),
+          y: clampInt((p.y - g.y) / g.sy, 0, maxY())
+        };
+      }
+
+      function screenPoint(x, y) {
+        const g = geometry(); return { x: g.x + x * g.sx, y: g.y + y * g.sy };
+      }
+
+      function tickValues(max) {
+        const step = max <= 30 ? 5 : max <= 60 ? 10 : 20;
+        const values = [0];
+        for (let i = step; i < max; i += step) values.push(i);
+        if (!values.includes(max)) values.push(max);
+        return values;
+      }
+
+      function labelFor(divider) {
+        const same = state.dividers.filter(d => d.orientation === divider.orientation);
+        return divider.orientation + (same.indexOf(divider) + 1);
+      }
+
+      function draw() {
+        svg.innerHTML = '';
+        svg.setAttribute('viewBox', `0 0 ${layout.vbW} ${layout.vbH}`);
+        const g = geometry();
+
+        const defs = node('defs');
+        const shadow = node('filter', { id: 'shadow', x: '-20%', y: '-20%', width: '140%', height: '140%' });
+        shadow.append(node('feDropShadow', { dx: '0', dy: '5', stdDeviation: '7', 'flood-color': '#0f172a', 'flood-opacity': '.12' }));
+        defs.append(shadow); svg.append(defs);
+
+        svg.append(node('rect', { x: g.x - 7, y: g.y - 7, width: g.w + 14, height: g.h + 14, rx: 6, fill: '#ffffff', stroke: '#111827', 'stroke-width': 2.5, filter: 'url(#shadow)' }));
+        svg.append(node('rect', { x: g.x, y: g.y, width: g.w, height: g.h, fill: '#f8fafc', stroke: '#94a3b8', 'stroke-width': 1 }));
+
+        const grid = node('g', { 'pointer-events': 'none' });
+        for (let i = 1; i < maxX(); i++) {
+          const p = screenPoint(i, 0);
+          const major = i % 7 === 0;
+          grid.append(node('line', { x1: p.x, y1: g.y, x2: p.x, y2: g.y + g.h, stroke: major ? '#c1ccd8' : '#dde4ec', 'stroke-width': major ? 1.15 : .65, 'stroke-dasharray': major ? 'none' : '2 4' }));
+        }
+        for (let i = 1; i < maxY(); i++) {
+          const p = screenPoint(0, i);
+          const major = i % 7 === 0;
+          grid.append(node('line', { x1: g.x, y1: p.y, x2: g.x + g.w, y2: p.y, stroke: major ? '#c1ccd8' : '#dde4ec', 'stroke-width': major ? 1.15 : .65, 'stroke-dasharray': major ? 'none' : '2 4' }));
+        }
+        svg.append(grid);
+
+        const notches = node('g', { fill: '#64748b', opacity: '.72', 'pointer-events': 'none' });
+        const notchW = Math.max(2.4, g.sx * (3 / 6));
+        const notchH = Math.max(2.4, g.sy * (3 / 6));
+        const depthY = Math.max(1.6, g.sy * (1.1 / 6));
+        const depthX = Math.max(1.6, g.sx * (1.1 / 6));
+        const radiusX = Math.max(.8, g.sx * (.5 / 6));
+        const radiusY = Math.max(.8, g.sy * (.5 / 6));
+        for (let i = 0; i < maxX(); i++) {
+          const p = screenPoint(i + .5, 0);
+          const x0 = p.x - notchW / 2; const x1 = p.x + notchW / 2;
+          const r = Math.min(radiusX, notchW / 2, depthY);
+          notches.append(node('path', { d: `M ${x0} ${g.y} V ${g.y + depthY - r} Q ${x0} ${g.y + depthY} ${x0 + r} ${g.y + depthY} H ${x1 - r} Q ${x1} ${g.y + depthY} ${x1} ${g.y + depthY - r} V ${g.y} Z` }));
+          const bottom = g.y + g.h;
+          notches.append(node('path', { d: `M ${x0} ${bottom} V ${bottom - depthY + r} Q ${x0} ${bottom - depthY} ${x0 + r} ${bottom - depthY} H ${x1 - r} Q ${x1} ${bottom - depthY} ${x1} ${bottom - depthY + r} V ${bottom} Z` }));
+        }
+        for (let i = 0; i < maxY(); i++) {
+          const p = screenPoint(0, i + .5);
+          const y0 = p.y - notchH / 2; const y1 = p.y + notchH / 2;
+          const r = Math.min(radiusY, notchH / 2, depthX);
+          notches.append(node('path', { d: `M ${g.x} ${y0} H ${g.x + depthX - r} Q ${g.x + depthX} ${y0} ${g.x + depthX} ${y0 + r} V ${y1 - r} Q ${g.x + depthX} ${y1} ${g.x + depthX - r} ${y1} H ${g.x} Z` }));
+          const right = g.x + g.w;
+          notches.append(node('path', { d: `M ${right} ${y0} H ${right - depthX + r} Q ${right - depthX} ${y0} ${right - depthX} ${y0 + r} V ${y1 - r} Q ${right - depthX} ${y1} ${right - depthX + r} ${y1} H ${right} Z` }));
+        }
+        svg.append(notches);
+
+        for (const t of tickValues(maxX())) {
+          const p = screenPoint(t, 0);
+          svg.append(node('text', { x: p.x, y: g.y + g.h + 24, fill: '#64748b', 'font-size': 11, 'text-anchor': 'middle' }, String(t)));
+        }
+        for (const t of tickValues(maxY())) {
+          const p = screenPoint(0, t);
+          svg.append(node('text', { x: g.x - 17, y: p.y + 4, fill: '#64748b', 'font-size': 11, 'text-anchor': 'end' }, String(t)));
+        }
+        svg.append(node('text', { x: g.x + g.w / 2, y: g.y + g.h + 46, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, `X 轴 · ${maxX()} 槽`));
+        const yTitle = node('text', { x: g.x - 50, y: g.y + g.h / 2, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', transform: `rotate(-90 ${g.x - 50} ${g.y + g.h / 2})` }, `Y 轴 · ${maxY()} 槽`);
+        svg.append(yTitle);
+
+        const hit = node('rect', { x: g.x - 8, y: g.y - 8, width: g.w + 16, height: g.h + 16, fill: 'transparent', style: 'cursor:crosshair' });
+        hit.addEventListener('pointerdown', beginDraw);
+        svg.append(hit);
+
+        state.dividers.forEach((d, index) => drawDivider(d, index, d.id === state.selected));
+        if (state.draft) drawDivider(state.draft, -1, false, true);
+      }
+
+      function drawDivider(d, index, selected, draft = false) {
+        const color = draft ? '#475569' : colors[index % colors.length];
+        const a = screenPoint(d.x1, d.y1); const b = screenPoint(d.x2, d.y2);
+        const group = node('g', { style: draft ? 'pointer-events:none' : 'cursor:crosshair' });
+        const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+        const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
+        if (!draft) group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'transparent', 'stroke-width': 24, 'stroke-linecap': 'round', 'pointer-events': 'stroke' }));
+        group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-width': selected ? 10 : 8, 'stroke-linecap': 'round', opacity: .92 }));
+        const visible = node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, 'stroke-width': selected ? 5 : 4, 'stroke-linecap': 'round', 'stroke-dasharray': draft ? '7 6' : 'none', opacity: draft ? .78 : 1 });
+        group.append(visible);
+        const startHandle = node('circle', { cx: a.x, cy: a.y, r: selected ? 6 : 5, fill: '#fff', stroke: color, 'stroke-width': 2.5, style: `cursor:${d.orientation === 'H' ? 'ew-resize' : 'ns-resize'}` });
+        const endHandle = node('circle', { cx: b.x, cy: b.y, r: selected ? 6 : 5, fill: '#fff', stroke: color, 'stroke-width': 2.5, style: `cursor:${d.orientation === 'H' ? 'ew-resize' : 'ns-resize'}` });
+        group.append(startHandle); group.append(endHandle);
+        const labelY = d.orientation === 'H' ? my - 10 : my;
+        const labelX = d.orientation === 'H' ? mx : mx + 12;
+        const rot = d.orientation === 'V' ? `rotate(-90 ${labelX} ${labelY})` : '';
+        const content = draft ? `${slots}槽 · ${lengthForSlots(slots)}mm` : `${labelFor(d)}  ${slots}槽`;
+        if (!draft) {
+          group.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginBodyGesture(evt, d); });
+          group.addEventListener('contextmenu', evt => { evt.preventDefault(); evt.stopPropagation(); deleteDividerWithToast(d.id); });
+          startHandle.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginExtend(evt, d, 'start'); });
+          endHandle.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginExtend(evt, d, 'end'); });
+        }
+        svg.append(group);
+
+        const labelGroup = node('g', { style: draft ? 'pointer-events:none' : 'cursor:move' });
+        labelGroup.append(node('rect', { x: labelX - 32, y: labelY - 13, width: 64, height: 22, rx: 7, fill: 'transparent' }));
+        labelGroup.append(node('text', { x: labelX, y: labelY, fill: color, 'font-size': 12, 'font-weight': 800, 'text-anchor': 'middle', transform: rot, stroke: '#fff', 'stroke-width': 4, 'paint-order': 'stroke' }, content));
+        if (!draft) {
+          labelGroup.addEventListener('pointerdown', evt => { evt.stopPropagation(); state.selected = d.id; beginMove(evt, d); });
+          labelGroup.addEventListener('contextmenu', evt => { evt.preventDefault(); evt.stopPropagation(); deleteDividerWithToast(d.id); });
+        }
+        svg.append(labelGroup);
+      }
+
+      function beginDraw(evt) {
+        if (evt.button !== undefined && evt.button !== 0) return;
+        evt.preventDefault();
+        const start = slotPoint(evt);
+        const isOnBorder = start.x === 0 || start.x === maxX() || start.y === 0 || start.y === maxY();
+        if (!isOnBorder) { showToast('起点必须在边框或已有分隔板上'); return; }
+        state.drawOrigin = { slot: start, screen: svgPoint(evt) };
+        state.draft = { orientation: 'H', x1: start.x, y1: start.y, x2: start.x, y2: start.y };
+        svg.setPointerCapture?.(evt.pointerId);
+        svg.addEventListener('pointermove', moveDraw);
+        svg.addEventListener('pointerup', endDraw, { once: true });
+        svg.addEventListener('pointercancel', endDraw, { once: true });
+      }
+
+      function moveDraw(evt) {
+        if (!state.draft || !state.drawOrigin) return;
+        const p = slotPoint(evt); const raw = svgPoint(evt);
+        const direction = Math.abs(raw.x - state.drawOrigin.screen.x) >= Math.abs(raw.y - state.drawOrigin.screen.y) ? 'H' : 'V';
+        const start = state.drawOrigin.slot;
+        state.draft.orientation = direction; state.draft.x1 = start.x; state.draft.y1 = start.y;
+        state.draft.x2 = direction === 'H' ? p.x : start.x; state.draft.y2 = direction === 'V' ? p.y : start.y;
+        draw();
+      }
+
+      function endDraw() {
+        svg.removeEventListener('pointermove', moveDraw);
+        if (!state.draft) return;
+        const span = Math.abs(state.draft.orientation === 'H' ? state.draft.x2 - state.draft.x1 : state.draft.y2 - state.draft.y1);
+        if (span > 0) {
+          if (state.draft.orientation === 'H' && state.draft.x2 < state.draft.x1) [state.draft.x1, state.draft.x2] = [state.draft.x2, state.draft.x1];
+          if (state.draft.orientation === 'V' && state.draft.y2 < state.draft.y1) [state.draft.y1, state.draft.y2] = [state.draft.y2, state.draft.y1];
+          const divider = { ...state.draft, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) };
+          state.dividers.push(divider); state.selected = divider.id;
+        }
+        state.draft = null; state.drawOrigin = null; render();
+      }
+
+      function beginMove(evt, divider) {
+        evt.preventDefault();
+        const start = slotPoint(evt);
+        state.moving = { id: divider.id, start, original: { x1: divider.x1, y1: divider.y1, x2: divider.x2, y2: divider.y2 } };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveDivider); svg.addEventListener('pointerup', endMove, { once: true }); svg.addEventListener('pointercancel', endMove, { once: true });
+      }
+
+      function moveDivider(evt) {
+        if (!state.moving) return;
+        const divider = state.dividers.find(item => item.id === state.moving.id); if (!divider) return;
+        const p = slotPoint(evt); const o = state.moving.original;
+        if (divider.orientation === 'H') { const y = clampInt(o.y1 + p.y - state.moving.start.y, 0, maxY()); divider.y1 = y; divider.y2 = y; }
+        else { const x = clampInt(o.x1 + p.x - state.moving.start.x, 0, maxX()); divider.x1 = x; divider.x2 = x; }
+        draw();
+      }
+
+      function endMove() { svg.removeEventListener('pointermove', moveDivider); state.moving = null; render(); }
+
+      function beginExtend(evt, divider, end) {
+        evt.preventDefault();
+        state.extending = { id: divider.id, end };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveExtend); svg.addEventListener('pointerup', endExtend, { once: true }); svg.addEventListener('pointercancel', endExtend, { once: true });
+      }
+
+      function moveExtend(evt) {
+        if (!state.extending) return;
+        const divider = state.dividers.find(item => item.id === state.extending.id); if (!divider) return;
+        const p = slotPoint(evt);
+        if (divider.orientation === 'H') divider[state.extending.end === 'start' ? 'x1' : 'x2'] = p.x;
+        else divider[state.extending.end === 'start' ? 'y1' : 'y2'] = p.y;
+        draw();
+      }
+
+      function endExtend() { svg.removeEventListener('pointermove', moveExtend); state.extending = null; render(); }
+
+      function beginBodyGesture(evt, divider) {
+        evt.preventDefault();
+        state.bodyGesture = { id: divider.id, start: slotPoint(evt), screen: svgPoint(evt), action: null };
+        svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveBodyGesture); svg.addEventListener('pointerup', endBodyGesture, { once: true }); svg.addEventListener('pointercancel', endBodyGesture, { once: true });
+      }
+
+      function moveBodyGesture(evt) {
+        if (!state.bodyGesture) return;
+        const divider = state.dividers.find(item => item.id === state.bodyGesture.id); if (!divider) return;
+        const raw = svgPoint(evt); const dx = raw.x - state.bodyGesture.screen.x; const dy = raw.y - state.bodyGesture.screen.y;
+        if (!state.bodyGesture.action && Math.max(Math.abs(dx), Math.abs(dy)) > 5) {
+          const parallel = divider.orientation === 'H' ? Math.abs(dx) : Math.abs(dy);
+          const perpendicular = divider.orientation === 'H' ? Math.abs(dy) : Math.abs(dx);
+          state.bodyGesture.action = parallel >= perpendicular ? 'extend' : 'branch';
+          if (state.bodyGesture.action === 'branch') state.draft = { orientation: divider.orientation === 'H' ? 'V' : 'H', x1: state.bodyGesture.start.x, y1: state.bodyGesture.start.y, x2: state.bodyGesture.start.x, y2: state.bodyGesture.start.y };
+        }
+        const p = slotPoint(evt);
+        if (state.bodyGesture.action === 'extend') {
+          if (divider.orientation === 'H') divider[dx < 0 ? 'x1' : 'x2'] = p.x;
+          else divider[dy < 0 ? 'y1' : 'y2'] = p.y;
+        } else if (state.bodyGesture.action === 'branch') {
+          if (state.draft.orientation === 'H') state.draft.x2 = p.x;
+          else state.draft.y2 = p.y;
+        }
+        if (state.bodyGesture.action) draw();
+      }
+
+      function endBodyGesture() {
+        svg.removeEventListener('pointermove', moveBodyGesture);
+        if (state.bodyGesture?.action === 'branch' && state.draft) {
+          const span = Math.abs(state.draft.orientation === 'H' ? state.draft.x2 - state.draft.x1 : state.draft.y2 - state.draft.y1);
+          if (span > 0) { const divider = { ...state.draft, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }; state.dividers.push(divider); state.selected = divider.id; }
+        }
+        state.draft = null; state.bodyGesture = null; render();
+      }
+
+      function makeDefaultSplit() {
+        const cx = Math.round(maxX() / 2); const cy = Math.round(maxY() / 2);
+        state.dividers = [
+          { id: 'h-' + Date.now(), orientation: 'H', x1: 0, y1: cy, x2: cx, y2: cy },
+          { id: 'v-' + Date.now(), orientation: 'V', x1: cx, y1: 0, x2: cx, y2: maxY() }
+        ];
+        state.selected = state.dividers[0].id; render();
+      }
+
+      function updateDimensions() {
+        state.xCells = clampInt(el('xCells').value, 1, 20);
+        state.yCells = clampInt(el('yCells').value, 1, 20);
+        el('xCells').value = state.xCells; el('yCells').value = state.yCells;
+        state.dividers = [];
+        state.selected = null;
+        render();
+        showToast('盒体尺寸已更新，布局已重置');
+      }
+
+      function deleteDivider(id) {
+        state.dividers = state.dividers.filter(d => d.id !== id);
+        if (state.selected === id) state.selected = state.dividers[0]?.id || null;
+        render();
+      }
+
+      function deleteDividerWithToast(id) {
+        const divider = state.dividers.find(d => d.id === id);
+        const label = divider ? labelFor(divider) : '分隔板';
+        deleteDivider(id);
+        showToast(`${label} 已删除`);
+      }
+
+      function updateEndpoint(id, which, value) {
+        const d = state.dividers.find(item => item.id === id); if (!d) return;
+        const max = d.orientation === 'H' ? maxX() : maxY();
+        const v = clampInt(value, 0, max);
+        if (d.orientation === 'H') d[which === 'start' ? 'x1' : 'x2'] = v;
+        else d[which === 'start' ? 'y1' : 'y2'] = v;
+        const span = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+        if (!span) showToast('分隔板至少需要跨越 1 个槽位');
+        render();
+      }
+
+      function renderList() {
+        const list = el('dividerList'); list.innerHTML = '';
+        el('dividerCount').textContent = `${state.dividers.length} 块`;
+        if (!state.dividers.length) {
+          const empty = document.createElement('div'); empty.className = 'empty';
+          empty.innerHTML = '<div><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="9" y="10" width="46" height="44" rx="4" stroke="currentColor" stroke-width="3"/><path d="M32 10v44M9 32h23" stroke="currentColor" stroke-width="3" stroke-dasharray="4 4"/></svg><p>从盒体边框拖动即可新增分隔板。</p></div>';
+          list.append(empty); return;
+        }
+        state.dividers.forEach((d, index) => {
+          const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+          const item = document.createElement('article');
+          item.className = 'divider-item' + (d.id === state.selected ? ' selected' : '');
+          item.addEventListener('click', () => { state.selected = d.id; render(); });
+          item.innerHTML = `
+            <div class="item-top">
+              <div class="item-name"><span class="swatch" style="background:${colors[index % colors.length]}"></span>${labelFor(d)} · ${d.orientation === 'H' ? `横向 · Y${d.y1}` : `纵向 · X${d.x1}`}</div>
+              <button class="delete-btn" type="button" aria-label="删除 ${labelFor(d)}">×</button>
+            </div>
+            <div class="item-result"><span class="slot-result">${slots} 槽</span><span class="mm-result">${lengthForSlots(slots)} mm</span></div>`;
+          item.querySelector('.delete-btn').addEventListener('click', evt => { evt.stopPropagation(); deleteDivider(d.id); });
+          list.append(item);
+        });
+      }
+
+      function renderMetrics() {
+        el('outerSize').textContent = `${outerForCells(state.xCells).toFixed(1)} × ${outerForCells(state.yCells).toFixed(1)} mm`;
+        el('slotSize').textContent = `X ${maxX()}槽 · Y ${maxY()}槽`;
+      }
+
+      function render() { renderMetrics(); renderList(); draw(); }
+
+      let toastTimer;
+      function showToast(message) {
+        const toast = el('toast'); toast.textContent = message; toast.classList.add('show');
+        clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+      }
+
+      async function copyList() {
+        if (!state.dividers.length) return showToast('还没有分隔板可以复制');
+        const rows = [
+          `Gridfinity 盒体：${state.xCells} × ${state.yCells} 格`,
+          `盒体外形：${outerForCells(state.xCells).toFixed(1)} × ${outerForCells(state.yCells).toFixed(1)} mm`,
+          `槽位范围：X ${maxX()}槽 / Y ${maxY()}槽`, '',
+          ...state.dividers.map(d => {
+            const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+            const start = d.orientation === 'H' ? d.x1 : d.y1;
+            const end = d.orientation === 'H' ? d.x2 : d.y2;
+            return `${labelFor(d)} ${d.orientation === 'H' ? '横向' : '纵向'}：${start} → ${end}｜${slots}槽｜${lengthForSlots(slots)} mm`;
+          })
+        ];
+        try { await navigator.clipboard.writeText(rows.join('\n')); showToast('定制清单已复制'); }
+        catch { showToast('浏览器未允许复制，请手动记录清单'); }
+      }
+
+      el('xCells').addEventListener('change', updateDimensions);
+      el('yCells').addEventListener('change', updateDimensions);
+      el('clearAll').addEventListener('click', () => { state.dividers = []; state.selected = null; render(); });
+      el('copyList').addEventListener('click', copyList);
+      window.addEventListener('resize', draw);
+      window.addEventListener('keydown', evt => {
+        if ((evt.key === 'Delete' || evt.key === 'Backspace') && state.selected && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) deleteDivider(state.selected);
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
