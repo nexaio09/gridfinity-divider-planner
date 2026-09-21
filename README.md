@@ -33,6 +33,10 @@ tutorial/             使用教程 GIF
 
 将仓库启用 GitHub Pages 后，根目录的 `index.html` 即为网页工具入口。
 
+## 使用教程
+
+![Gridfinity 分隔板规划器使用教程](tutorial/gridfinity-divider-tutorial.gif)
+
 ## 打印与修改
 
 请根据打印机、材料和实际打印结果调整公差。修改 Fusion 360 参数后，建议同时重新导出 STEP 和 STL 文件。
