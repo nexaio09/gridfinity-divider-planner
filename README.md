@@ -20,6 +20,18 @@
 - 凹槽内侧圆角：R0.5
 - 分隔板长度：3 × 插槽数量 × 2 + 5 mm
 
+## 模型展示
+
+### 分隔板组合示例
+
+![带分隔板的 Gridfinity 收纳盒](images/box-with-dividers.jpg)
+
+### 收纳盒外观
+
+![黄色 Gridfinity 收纳盒](images/box-yellow.png)
+
+![橙色 Gridfinity 收纳盒](images/box-orange.png)
+
 ## 文件结构
 
 ```text
