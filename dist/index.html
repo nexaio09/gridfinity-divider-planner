@@ -208,8 +208,9 @@
             <button class="tool" id="toolAuto" type="button" aria-pressed="true">↔ 自动识别方向</button>
             <button class="tool" id="toolH" type="button" aria-pressed="false">— 锁定横向</button>
             <button class="tool" id="toolV" type="button" aria-pressed="false">│ 锁定纵向</button>
+            <button class="tool" id="toolBranch" type="button" aria-pressed="false">＋ 从板上绘制分支</button>
           </div>
-          <div class="hint">可从边框或已有分隔板上直接拖出新板 · 自动识别方向<br><span class="slot-spec">单槽 3 × 1.1 mm · 内圆角 R0.5</span></div>
+          <div class="hint">起点仅限边框或已有分隔板 · 直接拖动已有板可移动<br><span class="slot-spec">单槽 3 × 1.1 mm · 内圆角 R0.5</span></div>
         </div>
         <div class="canvas-wrap">
           <svg id="planner" role="img" aria-label="Gridfinity 盒体槽位规划图"></svg>
@@ -239,7 +240,7 @@
     (() => {
       const SVG_NS = 'http://www.w3.org/2000/svg';
       const colors = ['#1687d9', '#ec7c2c', '#0f9f76', '#8b5cf6', '#dc4c5a', '#0891b2'];
-      const state = { xCells: 6, yCells: 6, tool: 'AUTO', dividers: [], selected: null, draft: null, drawOrigin: null };
+      const state = { xCells: 6, yCells: 6, tool: 'AUTO', branchMode: false, dividers: [], selected: null, draft: null, drawOrigin: null, moving: null };
       const el = id => document.getElementById(id);
       const svg = el('planner');
       const layout = { vbW: 760, vbH: 610, left: 72, top: 34, maxW: 625, maxH: 515 };
@@ -377,7 +378,7 @@
         const yTitle = node('text', { x: g.x - 50, y: g.y + g.h / 2, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', transform: `rotate(-90 ${g.x - 50} ${g.y + g.h / 2})` }, `Y 轴 · ${maxY()} 槽`);
         svg.append(yTitle);
 
-        const hit = node('rect', { x: g.x, y: g.y, width: g.w, height: g.h, fill: 'transparent', style: 'cursor:crosshair' });
+        const hit = node('rect', { x: g.x - 8, y: g.y - 8, width: g.w + 16, height: g.h + 16, fill: 'transparent', style: 'cursor:crosshair' });
         hit.addEventListener('pointerdown', beginDraw);
         svg.append(hit);
 
@@ -388,7 +389,8 @@
       function drawDivider(d, index, selected, draft = false) {
         const color = draft ? '#475569' : colors[index % colors.length];
         const a = screenPoint(d.x1, d.y1); const b = screenPoint(d.x2, d.y2);
-        const group = node('g', { style: draft ? 'pointer-events:none' : 'cursor:crosshair' });
+        const group = node('g', { style: draft ? 'pointer-events:none' : `cursor:${state.branchMode ? 'crosshair' : 'move'}` });
+        if (!draft) group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'transparent', 'stroke-width': 22, 'stroke-linecap': 'round', 'pointer-events': 'stroke' }));
         group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-width': selected ? 10 : 8, 'stroke-linecap': 'round', opacity: .92 }));
         group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, 'stroke-width': selected ? 5 : 4, 'stroke-linecap': 'round', 'stroke-dasharray': draft ? '7 6' : 'none', opacity: draft ? .78 : 1 }));
         group.append(node('circle', { cx: a.x, cy: a.y, r: selected ? 5.5 : 4, fill: '#fff', stroke: color, 'stroke-width': 2.5 }));
@@ -404,7 +406,8 @@
         if (!draft) group.addEventListener('pointerdown', evt => {
           evt.stopPropagation();
           state.selected = d.id;
-          beginDraw(evt, d);
+          if (state.branchMode) beginDraw(evt, d);
+          else beginMove(evt, d);
         });
         svg.append(group);
       }
@@ -413,6 +416,11 @@
         if (evt.button !== undefined && evt.button !== 0) return;
         evt.preventDefault();
         const start = slotPoint(evt);
+        const isOnBorder = start.x === 0 || start.x === maxX() || start.y === 0 || start.y === maxY();
+        if (!sourceDivider && !isOnBorder) {
+          showToast('起点必须在边框或已有分隔板上');
+          return;
+        }
         const initialDirection = state.tool === 'V' ? 'V' : 'H';
         state.drawOrigin = { slot: start, screen: svgPoint(evt), sourceDividerId: sourceDivider?.id || null };
         state.draft = initialDirection === 'H'
@@ -451,7 +459,48 @@
           const divider = { ...state.draft, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) };
           state.dividers.push(divider); state.selected = divider.id;
         } else if (!state.drawOrigin?.sourceDividerId) showToast('起点和终点不能相同');
-        state.draft = null; state.drawOrigin = null; render();
+        const wasBranch = Boolean(state.drawOrigin?.sourceDividerId);
+        state.draft = null; state.drawOrigin = null;
+        if (wasBranch) state.branchMode = false;
+        render();
+      }
+
+      function beginMove(evt, divider) {
+        if (evt.button !== undefined && evt.button !== 0) return;
+        evt.preventDefault();
+        const start = slotPoint(evt);
+        state.moving = {
+          id: divider.id,
+          start,
+          original: { x1: divider.x1, y1: divider.y1, x2: divider.x2, y2: divider.y2 }
+        };
+        svg.setPointerCapture?.(evt.pointerId);
+        svg.addEventListener('pointermove', moveDivider);
+        svg.addEventListener('pointerup', endMove, { once: true });
+        svg.addEventListener('pointercancel', endMove, { once: true });
+      }
+
+      function moveDivider(evt) {
+        if (!state.moving) return;
+        const divider = state.dividers.find(item => item.id === state.moving.id);
+        if (!divider) return;
+        const p = slotPoint(evt); const o = state.moving.original;
+        if (divider.orientation === 'H') {
+          const delta = p.y - state.moving.start.y;
+          const y = clampInt(o.y1 + delta, 0, maxY());
+          divider.y1 = y; divider.y2 = y;
+        } else {
+          const delta = p.x - state.moving.start.x;
+          const x = clampInt(o.x1 + delta, 0, maxX());
+          divider.x1 = x; divider.x2 = x;
+        }
+        draw();
+      }
+
+      function endMove() {
+        svg.removeEventListener('pointermove', moveDivider);
+        state.moving = null;
+        render();
       }
 
       function setTool(tool) {
@@ -459,6 +508,13 @@
         el('toolAuto').setAttribute('aria-pressed', tool === 'AUTO');
         el('toolH').setAttribute('aria-pressed', tool === 'H');
         el('toolV').setAttribute('aria-pressed', tool === 'V');
+        draw();
+      }
+
+      function toggleBranchMode() {
+        state.branchMode = !state.branchMode;
+        el('toolBranch').setAttribute('aria-pressed', state.branchMode);
+        showToast(state.branchMode ? '分支模式：从已有分隔板上拖动' : '分支模式已关闭');
         draw();
       }
 
@@ -513,7 +569,7 @@
           item.addEventListener('click', () => { state.selected = d.id; render(); });
           item.innerHTML = `
             <div class="item-top">
-              <div class="item-name"><span class="swatch" style="background:${colors[index % colors.length]}"></span>${labelFor(d)} · ${d.orientation === 'H' ? '横向' : '纵向'}</div>
+              <div class="item-name"><span class="swatch" style="background:${colors[index % colors.length]}"></span>${labelFor(d)} · ${d.orientation === 'H' ? `横向 · Y${d.y1}` : `纵向 · X${d.x1}`}</div>
               <button class="delete-btn" type="button" aria-label="删除 ${labelFor(d)}">×</button>
             </div>
             <div class="item-result"><span class="slot-result">${slots} 槽</span><span class="mm-result">${lengthForSlots(slots)} mm</span></div>
@@ -535,7 +591,10 @@
         el('slotSize').textContent = `X ${maxX()}槽 · Y ${maxY()}槽`;
       }
 
-      function render() { renderMetrics(); renderList(); draw(); }
+      function render() {
+        el('toolBranch').setAttribute('aria-pressed', state.branchMode);
+        renderMetrics(); renderList(); draw();
+      }
 
       let toastTimer;
       function showToast(message) {
@@ -563,6 +622,7 @@
       el('toolAuto').addEventListener('click', () => setTool('AUTO'));
       el('toolH').addEventListener('click', () => setTool('H'));
       el('toolV').addEventListener('click', () => setTool('V'));
+      el('toolBranch').addEventListener('click', toggleBranchMode);
       el('xCells').addEventListener('change', updateDimensions);
       el('yCells').addEventListener('change', updateDimensions);
       el('defaultSplit').addEventListener('click', makeDefaultSplit);
