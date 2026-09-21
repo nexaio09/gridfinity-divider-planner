@@ -334,22 +334,6 @@
         }
         svg.append(notches);
 
-        // Enlarged groove detail so the physical 3 × 1.1 mm U-profile remains
-        // readable even when a large box compresses the edge grooves on screen.
-        const detail = node('g', { 'pointer-events': 'none' });
-        const dx = g.x + g.w - 166; const dy = g.y + 14;
-        detail.append(node('rect', { x: dx, y: dy, width: 150, height: 68, rx: 9, fill: '#ffffff', 'fill-opacity': '.94', stroke: '#cbd5e1' }));
-        detail.append(node('text', { x: dx + 12, y: dy + 17, fill: '#475569', 'font-size': 10, 'font-weight': 800 }, '凹槽放大示意'));
-        const gx0 = dx + 54; const gx1 = gx0 + 36; const gy = dy + 29; const gd = 14; const gr = 6;
-        detail.append(node('path', { d: `M ${dx + 15} ${gy} H ${gx0} V ${gy + gd - gr} Q ${gx0} ${gy + gd} ${gx0 + gr} ${gy + gd} H ${gx1 - gr} Q ${gx1} ${gy + gd} ${gx1} ${gy + gd - gr} V ${gy} H ${dx + 135}`, fill: 'none', stroke: '#334155', 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
-        detail.append(node('line', { x1: gx0, y1: dy + 51, x2: gx1, y2: dy + 51, stroke: '#1687d9', 'stroke-width': 1 }));
-        detail.append(node('line', { x1: gx0, y1: dy + 48, x2: gx0, y2: dy + 54, stroke: '#1687d9', 'stroke-width': 1 }));
-        detail.append(node('line', { x1: gx1, y1: dy + 48, x2: gx1, y2: dy + 54, stroke: '#1687d9', 'stroke-width': 1 }));
-        detail.append(node('text', { x: (gx0 + gx1) / 2, y: dy + 63, fill: '#1687d9', 'font-size': 9, 'font-weight': 800, 'text-anchor': 'middle' }, '3 mm'));
-        detail.append(node('text', { x: gx1 + 7, y: gy + 12, fill: '#ec7c2c', 'font-size': 9, 'font-weight': 800 }, '1.1'));
-        detail.append(node('text', { x: dx + 103, y: dy + 59, fill: '#64748b', 'font-size': 8, 'font-weight': 700 }, 'R0.5'));
-        svg.append(detail);
-
         for (const t of tickValues(maxX())) {
           const p = screenPoint(t, 0);
           svg.append(node('text', { x: p.x, y: g.y + g.h + 24, fill: '#64748b', 'font-size': 11, 'text-anchor': 'middle' }, String(t)));
@@ -526,7 +510,9 @@
         state.xCells = clampInt(el('xCells').value, 1, 20);
         state.yCells = clampInt(el('yCells').value, 1, 20);
         el('xCells').value = state.xCells; el('yCells').value = state.yCells;
-        makeDefaultSplit();
+        state.dividers = [];
+        state.selected = null;
+        render();
         showToast('盒体尺寸已更新，布局已重置');
       }
 
@@ -617,7 +603,7 @@
         if ((evt.key === 'Delete' || evt.key === 'Backspace') && state.selected && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) deleteDivider(state.selected);
       });
 
-      makeDefaultSplit();
+      render();
     })();
   </script>
 </body>
