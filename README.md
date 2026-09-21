@@ -4,7 +4,7 @@
 
 ## 在线工具
 
-打开 [Gridfinity 分隔板规划器](https://gridfinity-divider-planner.nexaio94.chatgpt.site)，可以拖动生成分隔板并自动计算槽位数量和板长。
+打开 [Gridfinity 分隔板规划器](https://nexaio09.github.io/gridfinity-divider-planner/)，可以拖动生成分隔板并自动计算槽位数量和板长。
 
 板长计算公式：
 
