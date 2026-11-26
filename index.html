@@ -260,10 +260,24 @@
 
       function slotPoint(evt) {
         const p = svgPoint(evt); const g = geometry();
+        // Walls are 0/N; interior positions are groove centres, .5 .. N-.5.
+        const snapAxis = (value, max) => value <= .25 ? 0 : value >= max - .25 ? max : snapGroove(value, max);
         return {
-          x: clampInt((p.x - g.x) / g.sx, 0, maxX()),
-          y: clampInt((p.y - g.y) / g.sy, 0, maxY())
+          x: snapAxis((p.x - g.x) / g.sx, maxX()),
+          y: snapAxis((p.y - g.y) / g.sy, maxY())
         };
+      }
+
+      function snapGroove(value, max) {
+        return Math.min(max - .5, Math.max(.5, Math.round(value - .5) + .5));
+      }
+
+      function dividerSlots(d) {
+        const a = d.orientation === 'H' ? d.x1 : d.y1;
+        const b = d.orientation === 'H' ? d.x2 : d.y2;
+        // Count groove centres in [start, end); a shared junction is counted
+        // once, and a wall-to-wall divider always spans exactly N grooves.
+        return Math.ceil(Math.max(a, b) - .5) - Math.ceil(Math.min(a, b) - .5);
       }
 
       function screenPoint(x, y) {
@@ -293,65 +307,63 @@
         shadow.append(node('feDropShadow', { dx: '0', dy: '5', stdDeviation: '7', 'flood-color': '#0f172a', 'flood-opacity': '.12' }));
         defs.append(shadow); svg.append(defs);
 
-        // Keep one solid slot-width margin around the groove field so all
-        // grooves stay internal and the four rounded corners remain solid.
-        const cornerX = g.sx; const cornerY = g.sy;
-        svg.append(node('rect', { x: g.x - cornerX, y: g.y - cornerY, width: g.w + cornerX * 2, height: g.h + cornerY * 2, rx: 6, fill: '#ffffff', stroke: '#111827', 'stroke-width': 2.5, filter: 'url(#shadow)' }));
-        svg.append(node('rect', { x: g.x, y: g.y, width: g.w, height: g.h, fill: '#f8fafc', stroke: '#94a3b8', 'stroke-width': 1 }));
+        // The four walls meet at the cavity corners. Grooves remove material
+        // outwards from the cavity; solid lands separate all N recesses.
+        const depthY = Math.max(1.6, g.sy * (1.1 / 6));
+        const depthX = Math.max(1.6, g.sx * (1.1 / 6));
+        const wallX = depthX + 4; const wallY = depthY + 4;
+        svg.append(node('rect', { 'data-part': 'wall', x: g.x - wallX, y: g.y - wallY, width: g.w + wallX * 2, height: g.h + wallY * 2, rx: 6, fill: '#94a3b8', stroke: '#334155', 'stroke-width': 1.5, filter: 'url(#shadow)' }));
+        svg.append(node('rect', { x: g.x, y: g.y, width: g.w, height: g.h, fill: '#f8fafc' }));
 
         const grid = node('g', { 'pointer-events': 'none' });
-        for (let i = 1; i < maxX(); i++) {
-          const p = screenPoint(i, 0);
+        for (let i = 0; i < maxX(); i++) {
+          const p = screenPoint(i + .5, 0);
           const major = i % 7 === 0;
           grid.append(node('line', { x1: p.x, y1: g.y, x2: p.x, y2: g.y + g.h, stroke: major ? '#c1ccd8' : '#dde4ec', 'stroke-width': major ? 1.15 : .65, 'stroke-dasharray': major ? 'none' : '2 4' }));
         }
-        for (let i = 1; i < maxY(); i++) {
-          const p = screenPoint(0, i);
+        for (let i = 0; i < maxY(); i++) {
+          const p = screenPoint(0, i + .5);
           const major = i % 7 === 0;
           grid.append(node('line', { x1: g.x, y1: p.y, x2: g.x + g.w, y2: p.y, stroke: major ? '#c1ccd8' : '#dde4ec', 'stroke-width': major ? 1.15 : .65, 'stroke-dasharray': major ? 'none' : '2 4' }));
         }
         svg.append(grid);
 
-        const notches = node('g', { fill: '#64748b', opacity: '.72', 'pointer-events': 'none' });
+        const notches = node('g', { 'data-part': 'grooves', fill: '#f8fafc', 'pointer-events': 'none' });
         const notchW = Math.max(2.4, g.sx * (3 / 6));
         const notchH = Math.max(2.4, g.sy * (3 / 6));
-        const depthY = Math.max(1.6, g.sy * (1.1 / 6));
-        const depthX = Math.max(1.6, g.sx * (1.1 / 6));
         const radiusX = Math.max(.8, g.sx * (.5 / 6));
         const radiusY = Math.max(.8, g.sy * (.5 / 6));
         for (let i = 0; i < maxX(); i++) {
-          // Center each groove in its internal slot. The surrounding frame
-          // supplies the solid corner margins, so no groove spills outside.
           const p = screenPoint(i + .5, 0);
           const x0 = p.x - notchW / 2; const x1 = p.x + notchW / 2;
           const r = Math.min(radiusX, notchW / 2, depthY);
-          notches.append(node('path', { d: `M ${x0} ${g.y} V ${g.y + depthY - r} Q ${x0} ${g.y + depthY} ${x0 + r} ${g.y + depthY} H ${x1 - r} Q ${x1} ${g.y + depthY} ${x1} ${g.y + depthY - r} V ${g.y} Z` }));
+          notches.append(node('path', { 'data-side': 'top', d: `M ${x0} ${g.y} V ${g.y - depthY + r} Q ${x0} ${g.y - depthY} ${x0 + r} ${g.y - depthY} H ${x1 - r} Q ${x1} ${g.y - depthY} ${x1} ${g.y - depthY + r} V ${g.y} Z` }));
           const bottom = g.y + g.h;
-          notches.append(node('path', { d: `M ${x0} ${bottom} V ${bottom - depthY + r} Q ${x0} ${bottom - depthY} ${x0 + r} ${bottom - depthY} H ${x1 - r} Q ${x1} ${bottom - depthY} ${x1} ${bottom - depthY + r} V ${bottom} Z` }));
+          notches.append(node('path', { 'data-side': 'bottom', d: `M ${x0} ${bottom} V ${bottom + depthY - r} Q ${x0} ${bottom + depthY} ${x0 + r} ${bottom + depthY} H ${x1 - r} Q ${x1} ${bottom + depthY} ${x1} ${bottom + depthY - r} V ${bottom} Z` }));
         }
         for (let i = 0; i < maxY(); i++) {
           const p = screenPoint(0, i + .5);
           const y0 = p.y - notchH / 2; const y1 = p.y + notchH / 2;
           const r = Math.min(radiusY, notchH / 2, depthX);
-          notches.append(node('path', { d: `M ${g.x} ${y0} H ${g.x + depthX - r} Q ${g.x + depthX} ${y0} ${g.x + depthX} ${y0 + r} V ${y1 - r} Q ${g.x + depthX} ${y1} ${g.x + depthX - r} ${y1} H ${g.x} Z` }));
+          notches.append(node('path', { 'data-side': 'left', d: `M ${g.x} ${y0} H ${g.x - depthX + r} Q ${g.x - depthX} ${y0} ${g.x - depthX} ${y0 + r} V ${y1 - r} Q ${g.x - depthX} ${y1} ${g.x - depthX + r} ${y1} H ${g.x} Z` }));
           const right = g.x + g.w;
-          notches.append(node('path', { d: `M ${right} ${y0} H ${right - depthX + r} Q ${right - depthX} ${y0} ${right - depthX} ${y0 + r} V ${y1 - r} Q ${right - depthX} ${y1} ${right - depthX + r} ${y1} H ${right} Z` }));
+          notches.append(node('path', { 'data-side': 'right', d: `M ${right} ${y0} H ${right + depthX - r} Q ${right + depthX} ${y0} ${right + depthX} ${y0 + r} V ${y1 - r} Q ${right + depthX} ${y1} ${right + depthX - r} ${y1} H ${right} Z` }));
         }
         svg.append(notches);
 
         for (const t of tickValues(maxX())) {
           const p = screenPoint(t, 0);
-          svg.append(node('text', { x: p.x, y: g.y + g.h + 24, fill: '#64748b', 'font-size': 11, 'text-anchor': 'middle' }, String(t)));
+          svg.append(node('text', { x: p.x, y: g.y + g.h + wallY + 14, fill: '#64748b', 'font-size': 11, 'text-anchor': 'middle' }, String(t)));
         }
         for (const t of tickValues(maxY())) {
           const p = screenPoint(0, t);
-          svg.append(node('text', { x: g.x - 17, y: p.y + 4, fill: '#64748b', 'font-size': 11, 'text-anchor': 'end' }, String(t)));
+          svg.append(node('text', { x: g.x - wallX - 10, y: p.y + 4, fill: '#64748b', 'font-size': 11, 'text-anchor': 'end' }, String(t)));
         }
-        svg.append(node('text', { x: g.x + g.w / 2, y: g.y + g.h + 46, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, `X 轴 · ${maxX()} 槽`));
-        const yTitle = node('text', { x: g.x - 50, y: g.y + g.h / 2, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', transform: `rotate(-90 ${g.x - 50} ${g.y + g.h / 2})` }, `Y 轴 · ${maxY()} 槽`);
+        svg.append(node('text', { x: g.x + g.w / 2, y: g.y + g.h + wallY + 34, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, `X 轴 · ${maxX()} 槽`));
+        const yTitle = node('text', { x: g.x - wallX - 34, y: g.y + g.h / 2, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', transform: `rotate(-90 ${g.x - wallX - 34} ${g.y + g.h / 2})` }, `Y 轴 · ${maxY()} 槽`);
         svg.append(yTitle);
 
-        const hit = node('rect', { x: g.x - cornerX - 8, y: g.y - cornerY - 8, width: g.w + cornerX * 2 + 16, height: g.h + cornerY * 2 + 16, fill: 'transparent', style: 'cursor:crosshair' });
+        const hit = node('rect', { x: g.x - wallX - 3, y: g.y - wallY - 3, width: g.w + wallX * 2 + 6, height: g.h + wallY * 2 + 6, fill: 'transparent', style: 'cursor:crosshair' });
         hit.addEventListener('pointerdown', beginDraw);
         svg.append(hit);
 
@@ -363,7 +375,7 @@
         const color = draft ? '#475569' : colors[index % colors.length];
         const a = screenPoint(d.x1, d.y1); const b = screenPoint(d.x2, d.y2);
         const group = node('g', { style: draft ? 'pointer-events:none' : 'cursor:crosshair' });
-        const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+        const slots = dividerSlots(d);
         const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
         if (!draft) group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'transparent', 'stroke-width': 24, 'stroke-linecap': 'round', 'pointer-events': 'stroke' }));
         group.append(node('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-width': selected ? 10 : 8, 'stroke-linecap': 'round', opacity: .92 }));
@@ -400,7 +412,10 @@
         const start = slotPoint(evt);
         const isOnBorder = start.x === 0 || start.x === maxX() || start.y === 0 || start.y === maxY();
         if (!isOnBorder) { showToast('起点必须在边框或已有分隔板上'); return; }
-        state.drawOrigin = { slot: start, screen: svgPoint(evt) };
+        const verticalWall = (start.x === 0 || start.x === maxX()) && start.y > 0 && start.y < maxY();
+        const horizontalWall = (start.y === 0 || start.y === maxY()) && start.x > 0 && start.x < maxX();
+        if (!verticalWall && !horizontalWall) { showToast('请从边框上的凹槽开始拖动'); return; }
+        state.drawOrigin = { slot: start, screen: svgPoint(evt), orientation: verticalWall ? 'H' : 'V' };
         state.draft = { orientation: 'H', x1: start.x, y1: start.y, x2: start.x, y2: start.y };
         svg.setPointerCapture?.(evt.pointerId);
         svg.addEventListener('pointermove', moveDraw);
@@ -411,7 +426,7 @@
       function moveDraw(evt) {
         if (!state.draft || !state.drawOrigin) return;
         const p = slotPoint(evt); const raw = svgPoint(evt);
-        const direction = Math.abs(raw.x - state.drawOrigin.screen.x) >= Math.abs(raw.y - state.drawOrigin.screen.y) ? 'H' : 'V';
+        const direction = state.drawOrigin.orientation;
         const start = state.drawOrigin.slot;
         state.draft.orientation = direction; state.draft.x1 = start.x; state.draft.y1 = start.y;
         state.draft.x2 = direction === 'H' ? p.x : start.x; state.draft.y2 = direction === 'V' ? p.y : start.y;
@@ -442,8 +457,8 @@
         if (!state.moving) return;
         const divider = state.dividers.find(item => item.id === state.moving.id); if (!divider) return;
         const p = slotPoint(evt); const o = state.moving.original;
-        if (divider.orientation === 'H') { const y = clampInt(o.y1 + p.y - state.moving.start.y, 0, maxY()); divider.y1 = y; divider.y2 = y; }
-        else { const x = clampInt(o.x1 + p.x - state.moving.start.x, 0, maxX()); divider.x1 = x; divider.x2 = x; }
+        if (divider.orientation === 'H') { const y = snapGroove(o.y1 + p.y - state.moving.start.y, maxY()); divider.y1 = y; divider.y2 = y; }
+        else { const x = snapGroove(o.x1 + p.x - state.moving.start.x, maxX()); divider.x1 = x; divider.x2 = x; }
         draw();
       }
 
@@ -468,7 +483,10 @@
 
       function beginBodyGesture(evt, divider) {
         evt.preventDefault();
-        state.bodyGesture = { id: divider.id, start: slotPoint(evt), screen: svgPoint(evt), action: null };
+        const start = slotPoint(evt);
+        if (divider.orientation === 'H') { start.x = snapGroove(start.x, maxX()); start.y = divider.y1; }
+        else { start.x = divider.x1; start.y = snapGroove(start.y, maxY()); }
+        state.bodyGesture = { id: divider.id, start, screen: svgPoint(evt), action: null };
         svg.setPointerCapture?.(evt.pointerId); svg.addEventListener('pointermove', moveBodyGesture); svg.addEventListener('pointerup', endBodyGesture, { once: true }); svg.addEventListener('pointercancel', endBodyGesture, { once: true });
       }
 
@@ -554,7 +572,7 @@
           list.append(empty); return;
         }
         state.dividers.forEach((d, index) => {
-          const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+          const slots = dividerSlots(d);
           const item = document.createElement('article');
           item.className = 'divider-item' + (d.id === state.selected ? ' selected' : '');
           item.addEventListener('click', () => { state.selected = d.id; render(); });
@@ -589,7 +607,7 @@
           `盒体外形：${outerForCells(state.xCells).toFixed(1)} × ${outerForCells(state.yCells).toFixed(1)} mm`,
           `槽位范围：X ${maxX()}槽 / Y ${maxY()}槽`, '',
           ...state.dividers.map(d => {
-            const slots = Math.abs(d.orientation === 'H' ? d.x2 - d.x1 : d.y2 - d.y1);
+            const slots = dividerSlots(d);
             const start = d.orientation === 'H' ? d.x1 : d.y1;
             const end = d.orientation === 'H' ? d.x2 : d.y2;
             return `${labelFor(d)} ${d.orientation === 'H' ? '横向' : '纵向'}：${start} → ${end}｜${slots}槽｜${lengthForSlots(slots)} mm`;
