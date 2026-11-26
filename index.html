@@ -293,7 +293,10 @@
         shadow.append(node('feDropShadow', { dx: '0', dy: '5', stdDeviation: '7', 'flood-color': '#0f172a', 'flood-opacity': '.12' }));
         defs.append(shadow); svg.append(defs);
 
-        svg.append(node('rect', { x: g.x - 7, y: g.y - 7, width: g.w + 14, height: g.h + 14, rx: 6, fill: '#ffffff', stroke: '#111827', 'stroke-width': 2.5, filter: 'url(#shadow)' }));
+        // Keep one solid slot-width margin around the groove field so all
+        // grooves stay internal and the four rounded corners remain solid.
+        const cornerX = g.sx; const cornerY = g.sy;
+        svg.append(node('rect', { x: g.x - cornerX, y: g.y - cornerY, width: g.w + cornerX * 2, height: g.h + cornerY * 2, rx: 6, fill: '#ffffff', stroke: '#111827', 'stroke-width': 2.5, filter: 'url(#shadow)' }));
         svg.append(node('rect', { x: g.x, y: g.y, width: g.w, height: g.h, fill: '#f8fafc', stroke: '#94a3b8', 'stroke-width': 1 }));
 
         const grid = node('g', { 'pointer-events': 'none' });
@@ -346,7 +349,7 @@
         const yTitle = node('text', { x: g.x - 50, y: g.y + g.h / 2, fill: '#475569', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', transform: `rotate(-90 ${g.x - 50} ${g.y + g.h / 2})` }, `Y 轴 · ${maxY()} 槽`);
         svg.append(yTitle);
 
-        const hit = node('rect', { x: g.x - 8, y: g.y - 8, width: g.w + 16, height: g.h + 16, fill: 'transparent', style: 'cursor:crosshair' });
+        const hit = node('rect', { x: g.x - cornerX - 8, y: g.y - cornerY - 8, width: g.w + cornerX * 2 + 16, height: g.h + cornerY * 2 + 16, fill: 'transparent', style: 'cursor:crosshair' });
         hit.addEventListener('pointerdown', beginDraw);
         svg.append(hit);
 
