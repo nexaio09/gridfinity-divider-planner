@@ -320,8 +320,9 @@
         const radiusX = Math.max(.8, g.sx * (.5 / 6));
         const radiusY = Math.max(.8, g.sy * (.5 / 6));
         for (let i = 0; i < maxX(); i++) {
-          // The first and last groove sit one slot in from the solid corners.
-          const p = screenPoint(i + 1.5, 0);
+          // Center each groove in its internal slot. The surrounding frame
+          // supplies the solid corner margins, so no groove spills outside.
+          const p = screenPoint(i + .5, 0);
           const x0 = p.x - notchW / 2; const x1 = p.x + notchW / 2;
           const r = Math.min(radiusX, notchW / 2, depthY);
           notches.append(node('path', { d: `M ${x0} ${g.y} V ${g.y + depthY - r} Q ${x0} ${g.y + depthY} ${x0 + r} ${g.y + depthY} H ${x1 - r} Q ${x1} ${g.y + depthY} ${x1} ${g.y + depthY - r} V ${g.y} Z` }));
@@ -329,7 +330,7 @@
           notches.append(node('path', { d: `M ${x0} ${bottom} V ${bottom - depthY + r} Q ${x0} ${bottom - depthY} ${x0 + r} ${bottom - depthY} H ${x1 - r} Q ${x1} ${bottom - depthY} ${x1} ${bottom - depthY + r} V ${bottom} Z` }));
         }
         for (let i = 0; i < maxY(); i++) {
-          const p = screenPoint(0, i + 1.5);
+          const p = screenPoint(0, i + .5);
           const y0 = p.y - notchH / 2; const y1 = p.y + notchH / 2;
           const r = Math.min(radiusY, notchH / 2, depthX);
           notches.append(node('path', { d: `M ${g.x} ${y0} H ${g.x + depthX - r} Q ${g.x + depthX} ${y0} ${g.x + depthX} ${y0 + r} V ${y1 - r} Q ${g.x + depthX} ${y1} ${g.x + depthX - r} ${y1} H ${g.x} Z` }));
